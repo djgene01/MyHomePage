@@ -1,0 +1,146 @@
+﻿@using System.Text.Json
+@inject IJSRuntime JS
+
+<div class="card bg-base-100 shadow-xl">
+    <div class="card-body">
+        <h2 class="card-title text-xl mb-4">
+            <i class="fas fa-sticky-note text-primary mr-2"></i>Notes
+        </h2>
+        <div class="mb-4">
+            <textarea class="textarea textarea-bordered w-full h-40" placeholder="Write your notes here..." @bind="currentNote"></textarea>
+        </div>
+        <div class="flex justify-between">
+            <button class="btn btn-primary btn-sm" @onclick="SaveNotes">Save</button>
+            <button class="btn btn-outline btn-sm" @onclick="ClearNotes">Clear</button>
+        </div>
+        <div class="mt-4">
+            <div class="collapse collapse-arrow bg-base-200">
+                <input type="checkbox" />
+                <div class="collapse-title font-medium">
+                    Saved Notes
+                </div>
+                <div class="collapse-content">
+                    @if (SavedNotes.Any())
+                    {
+                        @foreach (var note in SavedNotes)
+                        {
+                            <div class="mb-2 p-2 bg-base-100 rounded">
+                                @if (editingNoteId == note.Id)
+                                {
+                                    <textarea class="textarea textarea-bordered w-full mb-2" @bind="editingNoteContent"></textarea>
+                                    <div class="flex gap-2">
+                                        <button class="btn btn-success btn-xs" @onclick="() => SaveEditedNote(note)">
+                                            <i class="fas fa-save"></i> Save
+                                        </button>
+                                        <button class="btn btn-ghost btn-xs" @onclick="CancelEdit">
+                                            <i class="fas fa-times"></i> Cancel
+                                        </button>
+                                    </div>
+                                }
+                                else
+                                {
+                                    <div class="text-xs text-gray-500 mb-1">@note.Timestamp</div>
+                                    <p class="mb-2">@note.Content</p>
+                                    <div class="flex gap-2">
+                                        <button class="btn btn-ghost btn-xs" @onclick="() => StartEdit(note)">
+                                            <i class="fas fa-edit text-primary"></i>
+                                        </button>
+                                        <button class="btn btn-ghost btn-xs" @onclick="() => DeleteNote(note)">
+                                            <i class="fas fa-trash text-error"></i>
+                                        </button>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    }
+                    else
+                    {
+                        <p class="text-sm italic">No saved notes yet.</p>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private string currentNote = "";
+    private List<Note> SavedNotes { get; set; } = new();
+    private bool isInitialized = false;
+    private Guid? editingNoteId = null;
+    private string editingNoteContent = "";
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !isInitialized)
+        {
+            var savedNotes = await JS.InvokeAsync<string>("localStorage.getItem", "notes");
+            if (!string.IsNullOrEmpty(savedNotes))
+            {
+                SavedNotes = JsonSerializer.Deserialize<List<Note>>(savedNotes) ?? new();
+            }
+            isInitialized = true;
+            StateHasChanged();
+        }
+    }
+
+    private async Task SaveNotes()
+    {
+        if (!string.IsNullOrEmpty(currentNote.Trim()))
+        {
+            SavedNotes.Insert(0, new Note
+                {
+                    Id = Guid.NewGuid(),
+                    Content = currentNote,
+                    Timestamp = DateTime.Now.ToString("G")
+                });
+            await JS.InvokeVoidAsync("localStorage.setItem", "notes", JsonSerializer.Serialize(SavedNotes));
+            currentNote = "";
+            StateHasChanged();
+        }
+    }
+
+    private void ClearNotes()
+    {
+        currentNote = "";
+    }
+
+    private void StartEdit(Note note)
+    {
+        editingNoteId = note.Id;
+        editingNoteContent = note.Content;
+    }
+
+    private async Task SaveEditedNote(Note note)
+    {
+        if (!string.IsNullOrEmpty(editingNoteContent.Trim()))
+        {
+            note.Content = editingNoteContent;
+            note.Timestamp = DateTime.Now.ToString("G");
+            await JS.InvokeVoidAsync("localStorage.setItem", "notes", JsonSerializer.Serialize(SavedNotes));
+        }
+        editingNoteId = null;
+        editingNoteContent = "";
+        StateHasChanged();
+    }
+
+    private void CancelEdit()
+    {
+        editingNoteId = null;
+        editingNoteContent = "";
+    }
+
+    private async Task DeleteNote(Note note)
+    {
+        SavedNotes.Remove(note);
+        await JS.InvokeVoidAsync("localStorage.setItem", "notes", JsonSerializer.Serialize(SavedNotes));
+        StateHasChanged();
+    }
+
+    private class Note
+    {
+        public Guid Id { get; set; }
+        public string Content { get; set; } = "";
+        public string Timestamp { get; set; } = "";
+    }
+}

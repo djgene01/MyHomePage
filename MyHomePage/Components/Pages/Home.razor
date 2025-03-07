@@ -1,0 +1,141 @@
+﻿@page "/"
+@inject IJSRuntime JS
+
+<PageTitle>My Dashboard</PageTitle>
+
+<div class="fixed inset-0 bg-cover bg-center" style="@($"background-image: url('{WallpaperUrl}');")">
+    <div class="container mx-auto relative z-10 min-h-screen p-4">
+        <!-- Header with improved visibility -->
+        <header class="mb-6">
+            <div class="flex justify-between items-center">
+                <div class="flex items-center gap-4 bg-black/30 backdrop-blur-sm p-3 rounded-lg shadow-lg">
+                    <div class="text-xl font-semibold text-white">@CurrentTime</div>
+                    <div class="text-xl font-semibold text-white">@CurrentDate</div>
+                    <button class="btn btn-ghost btn-sm text-white hover:bg-white/20" title="Change wallpaper" @onclick="ShowWallpaperModal">
+                        <i class="fas fa-image"></i>
+                    </button>
+                </div>
+                <div class="bg-black/30 backdrop-blur-sm p-2 rounded-lg shadow-lg">
+                    <button class="btn btn-ghost btn-sm text-white hover:bg-white/20" title="Settings">
+                        <i class="fas fa-cog"></i>
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <BookmarksSection />
+            <NotesSection />
+            <TodoSection />
+        </div>
+    </div>
+
+    <!-- Wallpaper Modal -->
+    @if (showWallpaperModal)
+    {
+        <div class="modal modal-open">
+            <div class="modal-box w-11/12 max-w-6xl">
+                <h3 class="font-bold text-2xl mb-6">Select Wallpaper</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 p-4 max-h-[70vh] overflow-y-auto">
+                    @foreach (var preset in PresetWallpapers)
+                    {
+                        <div class="relative group">
+                            <button class="w-full" @onclick="() => SetWallpaper(preset)">
+                                <img src="@preset" class="w-full h-48 object-cover rounded-lg shadow-md transition-transform group-hover:scale-105" alt="Wallpaper preview" />
+                                <div class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/20 rounded-lg">
+                                    <span class="text-white font-medium">Select</span>
+                                </div>
+                            </button>
+                            @if (preset == WallpaperUrl)
+                            {
+                                <div class="absolute top-2 right-2 bg-primary text-white p-1 rounded-full">
+                                    <i class="fas fa-check text-xs"></i>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+                <div class="modal-action">
+                    <button class="btn" @onclick="HideWallpaperModal">Close</button>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private string CurrentTime { get; set; } = "00:00:00";
+    private string CurrentDate { get; set; } = "Loading...";
+    private string WallpaperUrl { get; set; } = "";
+    private bool showWallpaperModal = false;
+    
+    private List<string> PresetWallpapers { get; set; } = new()
+    {
+        "https://images.unsplash.com/photo-1506748686214-e9df14d4d9d0", // Abstract
+        "https://images.unsplash.com/photo-1441974231531-c6227db76b6e", // Forest
+        "https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05", // Mountains
+        "https://images.unsplash.com/photo-1507525428034-b723cf961d3e", // Beach
+        "https://images.unsplash.com/photo-1519681393784-d120267933ba", // Snowy mountains
+        "https://images.unsplash.com/photo-1482192505345-5655af888cc4", // Night sky
+        "https://images.unsplash.com/photo-1493246507139-91e8fad9978e"  // Desert
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        var now = DateTime.Now;
+        CurrentTime = now.ToString("HH:mm:ss");
+        CurrentDate = now.ToString("dddd, MMMM d");
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            var savedWallpaper = await JS.InvokeAsync<string>("localStorage.getItem", "wallpaper");
+            if (!string.IsNullOrEmpty(savedWallpaper) && PresetWallpapers.Contains(savedWallpaper))
+            {
+                WallpaperUrl = savedWallpaper;
+                await JS.InvokeVoidAsync("console.log", "Loaded wallpaper from localStorage");
+            }
+            else
+            {
+                WallpaperUrl = PresetWallpapers[0]; // Default to first preset
+            }
+            
+            // Start a timer to update the time every second
+            var timer = new System.Threading.Timer(
+                async (_) => 
+                {
+                    var now = DateTime.Now;
+                    CurrentTime = now.ToString("HH:mm:ss");
+                    CurrentDate = now.ToString("dddd, MMMM d");
+                    await InvokeAsync(StateHasChanged);
+                },
+                null, 
+                0, 
+                1000);
+            
+            StateHasChanged();
+        }
+    }
+
+    private async Task SetWallpaper(string url)
+    {
+        WallpaperUrl = url;
+        await JS.InvokeVoidAsync("localStorage.setItem", "wallpaper", WallpaperUrl);
+        await JS.InvokeVoidAsync("console.log", $"Wallpaper set to: {url}");
+        showWallpaperModal = false;
+        StateHasChanged();
+    }
+
+    private void ShowWallpaperModal()
+    {
+        showWallpaperModal = true;
+    }
+
+    private void HideWallpaperModal()
+    {
+        showWallpaperModal = false;
+    }
+}

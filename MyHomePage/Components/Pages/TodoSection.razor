@@ -1,0 +1,82 @@
+﻿@using System.Text.Json
+@inject IJSRuntime JS
+
+<div class="card bg-base-100 shadow-xl">
+    <div class="card-body">
+        <h2 class="card-title text-xl mb-4">
+            <i class="fas fa-tasks text-primary mr-2"></i>Todo List
+        </h2>
+        <div class="mb-4">
+            <div class="flex gap-2">
+                <input type="text" placeholder="Add a new task..." class="input input-bordered input-sm flex-1" @bind="newTask" />
+                <button class="btn btn-primary btn-sm" @onclick="AddTask">Add</button>
+            </div>
+        </div>
+        <div class="divider"></div>
+        <div class="space-y-2">
+            @foreach (var task in Tasks)
+            {
+                <div class="flex items-center gap-2">
+                    <input type="checkbox" class="checkbox checkbox-sm" @bind="task.IsCompleted" />
+                    <span class="flex-1 @(task.IsCompleted ? "line-through text-gray-500" : "")">@task.Text</span>
+                    <button class="btn btn-ghost btn-xs" @onclick="() => RemoveTask(task)">
+                        <i class="fas fa-trash text-error"></i>
+                    </button>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    private List<TodoItem> Tasks { get; set; } = new();
+    private string newTask = "";
+    private bool isInitialized = false;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !isInitialized)
+        {
+            var savedTasks = await JS.InvokeAsync<string>("localStorage.getItem", "todos");
+            if (!string.IsNullOrEmpty(savedTasks))
+            {
+                Tasks = JsonSerializer.Deserialize<List<TodoItem>>(savedTasks) ?? new();
+            }
+            else
+            {
+                Tasks = new List<TodoItem>
+                {
+                    new TodoItem { Text = "Complete dashboard design" },
+                    new TodoItem { Text = "Add bookmark functionality" },
+                    new TodoItem { Text = "Implement notes saving" }
+                };
+            }
+            isInitialized = true;
+            StateHasChanged();
+        }
+    }
+
+    private async Task AddTask()
+    {
+        if (!string.IsNullOrEmpty(newTask.Trim()))
+        {
+            Tasks.Add(new TodoItem { Text = newTask });
+            await JS.InvokeVoidAsync("localStorage.setItem", "todos", JsonSerializer.Serialize(Tasks));
+            newTask = "";
+            StateHasChanged();
+        }
+    }
+
+    private async Task RemoveTask(TodoItem task)
+    {
+        Tasks.Remove(task);
+        await JS.InvokeVoidAsync("localStorage.setItem", "todos", JsonSerializer.Serialize(Tasks));
+        StateHasChanged();
+    }
+
+    private class TodoItem
+    {
+        public string Text { get; set; } = "";
+        public bool IsCompleted { get; set; }
+    }
+}

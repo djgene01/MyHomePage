@@ -1,0 +1,144 @@
+﻿@inject IJSRuntime JS
+
+<div class="card bg-base-100 shadow-xl">
+    <div class="card-body">
+        <h2 class="card-title text-xl mb-4 flex justify-between items-center">
+            <span><i class="fas fa-music text-primary mr-2"></i>Music</span>
+            <button class="btn btn-ghost btn-sm" title="Change Embed Code" @onclick="ShowSettingsModal">
+                <i class="fas fa-cog"></i>
+            </button>
+        </h2>
+        <div class="divider"></div>
+        @if (!string.IsNullOrEmpty(EmbedSrc))
+        {
+            <div class="w-full" style="height: 80px;">
+                @((MarkupString)ModifiedEmbedCode)
+            </div>
+        }
+        else
+        {
+            <p class="text-gray-500">No embed code saved. Click the gear icon to add one.</p>
+        }
+    </div>
+</div>
+
+<!-- Settings Modal -->
+@if (showSettingsModal)
+{
+    <div class="modal modal-open">
+        <div class="modal-box">
+            <h3 class="font-bold text-lg">Change Music Embed Code</h3>
+            <div class="py-4">
+                <textarea class="textarea textarea-bordered w-full h-24" placeholder="Paste Spotify Embed Code"
+                          @bind="NewEmbedCode" @bind:event="oninput"></textarea>
+                <p class="text-sm text-gray-500 mt-1">Example: <iframe style=\"border-radius:12px\" src=\"https://open.spotify.com/embed/playlist/37i9dQZF1DXcBWIGoYBM5M\" width=\"100%\" height=\"352\" frameBorder=\"0\" allowfullscreen=\"\" allow=\"autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture\" loading=\"lazy\"></iframe></p>
+                <p class="text-sm text-red-500" id="errorMessage" style="display: @(!string.IsNullOrEmpty(ErrorMessage) ? "block" : "none")">@ErrorMessage</p>
+            </div>
+            <div class="modal-action">
+                <button class="btn btn-primary" @onclick="SaveEmbedCode">Save</button>
+                <button class="btn" @onclick="HideSettingsModal">Cancel</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private string EmbedCode { get; set; } = "";
+    private string NewEmbedCode { get; set; } = "";
+    private string EmbedSrc { get; set; }
+    private string ModifiedEmbedCode { get; set; }
+    private string ErrorMessage { get; set; } = "";
+    private bool showSettingsModal = false;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            var savedEmbed = await JS.InvokeAsync<string>("localStorage.getItem", "musicEmbed");
+            if (!string.IsNullOrEmpty(savedEmbed))
+            {
+                EmbedCode = savedEmbed;
+                NewEmbedCode = EmbedCode; // Sync for editing
+                await ParseEmbedCode();
+                UpdateModifiedEmbedCode(); // Apply autoplay and size
+            }
+            StateHasChanged();
+        }
+    }
+
+    private async Task SaveEmbedCode()
+    {
+        if (!string.IsNullOrEmpty(NewEmbedCode))
+        {
+            EmbedCode = NewEmbedCode;
+            await JS.InvokeVoidAsync("localStorage.setItem", "musicEmbed", EmbedCode);
+            await JS.InvokeVoidAsync("console.log", $"Saved embed code: {EmbedCode}");
+            ErrorMessage = "";
+            await ParseEmbedCode();
+            UpdateModifiedEmbedCode(); // Apply autoplay and size
+            showSettingsModal = false;
+            StateHasChanged();
+        }
+        else
+        {
+            ErrorMessage = "Please enter a valid Spotify embed code.";
+            StateHasChanged();
+        }
+    }
+
+    private async Task ParseEmbedCode()
+    {
+        try
+        {
+            var srcMatch = System.Text.RegularExpressions.Regex.Match(EmbedCode, "src=\"([^\"]+)\"");
+            if (!srcMatch.Success)
+            {
+                ErrorMessage = "Invalid embed code. Could not find src attribute.";
+                EmbedSrc = null;
+                return;
+            }
+
+            EmbedSrc = srcMatch.Groups[1].Value;
+            if (!EmbedSrc.StartsWith("https://open.spotify.com/embed/"))
+            {
+                ErrorMessage = "Invalid Spotify embed URL.";
+                EmbedSrc = null;
+                return;
+            }
+
+            // Ensure autoplay is included
+            if (!EmbedSrc.Contains("autoplay=1"))
+            {
+                EmbedSrc += (EmbedSrc.Contains("?") ? "&" : "?") + "autoplay=1";
+            }
+
+            await JS.InvokeVoidAsync("console.log", $"Parsed embed src: {EmbedSrc}");
+            UpdateModifiedEmbedCode();
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"Error parsing embed code: {ex.Message}";
+            await JS.InvokeVoidAsync("console.error", ErrorMessage);
+            EmbedSrc = null;
+            StateHasChanged();
+        }
+    }
+
+    private void UpdateModifiedEmbedCode()
+    {
+        if (!string.IsNullOrEmpty(EmbedCode))
+        {
+            // Modify the embed code to adjust size
+            var modified = EmbedCode.Replace("height=\"352\"", "height=\"80\"")
+                                  .Replace("width=\"100%\"", "width=\"100%\"");
+            ModifiedEmbedCode = modified;
+        }
+        else
+        {
+            ModifiedEmbedCode = "";
+        }
+    }
+
+    private void ShowSettingsModal() => showSettingsModal = true;
+    private void HideSettingsModal() => showSettingsModal = false;
+}

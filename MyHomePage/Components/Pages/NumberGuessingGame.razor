@@ -1,0 +1,172 @@
+﻿@using System.Text.Json
+@inject IJSRuntime JS
+
+<div class="card bg-base-100 shadow-xl">
+    <div class="card-body">
+        <h2 class="card-title text-xl mb-4">
+            <i class="fas fa-dice text-primary mr-2"></i>Number Guessing Game
+        </h2>
+
+        @if (!gameStarted)
+        {
+            <div class="text-center">
+                <p class="mb-4">Guess a number between 1 and 100!</p>
+                <button class="btn btn-primary" @onclick="StartGame">Start Game</button>
+            </div>
+        }
+        else
+        {
+            <div class="mb-4">
+                <input type="number" class="input input-bordered w-full"
+                       placeholder="Enter your guess (1-100)"
+                       @bind="playerGuess"
+                       @bind:event="oninput"
+                       min="1" max="100" />
+            </div>
+
+            <div class="flex justify-between mb-4">
+                <button class="btn btn-primary btn-sm" @onclick="SubmitGuess">Guess</button>
+                <button class="btn btn-outline btn-sm" @onclick="ResetGame">Reset</button>
+            </div>
+
+            @if (!string.IsNullOrEmpty(message))
+            {
+                <div class="alert @alertClass mb-4">
+                    <span>@message</span>
+                </div>
+            }
+
+            <div class="stats shadow">
+                <div class="stat">
+                    <div class="stat-title">Attempts</div>
+                    <div class="stat-value">@attempts</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-title">High Score</div>
+                    <div class="stat-value">@highScore</div>
+                </div>
+            </div>
+
+            <div class="mt-4">
+                <div class="collapse collapse-arrow bg-base-200">
+                    <input type="checkbox" />
+                    <div class="collapse-title font-medium">
+                        Previous Guesses
+                    </div>
+                    <div class="collapse-content">
+                        @if (guessHistory.Any())
+                        {
+                            <ul class="list-disc pl-4">
+                                @foreach (var guess in guessHistory)
+                                {
+                                    <li>@guess.Guess - @guess.Hint (@guess.Timestamp)</li>
+                                }
+                            </ul>
+                        }
+                        else
+                        {
+                            <p class="text-sm italic">No guesses yet.</p>
+                        }
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    private bool gameStarted = false;
+    private int targetNumber;
+    private int playerGuess;
+    private int attempts = 0;
+    private int highScore = 0;
+    private string message = "";
+    private string alertClass = "";
+    private List<GuessRecord> guessHistory = new();
+    private bool isInitialized = false;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !isInitialized)
+        {
+            var savedHighScore = await JS.InvokeAsync<string>("localStorage.getItem", "numberGameHighScore");
+            if (!string.IsNullOrEmpty(savedHighScore))
+            {
+                highScore = JsonSerializer.Deserialize<int>(savedHighScore);
+            }
+            isInitialized = true;
+            StateHasChanged();
+        }
+    }
+
+    private void StartGame()
+    {
+        gameStarted = true;
+        targetNumber = new Random().Next(1, 101); // 1 to 100 inclusive
+        attempts = 0;
+        guessHistory.Clear();
+        message = "";
+        playerGuess = 0;
+        StateHasChanged();
+    }
+
+    private async Task SubmitGuess()
+    {
+        if (playerGuess < 1 || playerGuess > 100)
+        {
+            ShowMessage("Please enter a number between 1 and 100.", "alert-error");
+            return;
+        }
+
+        attempts++;
+        guessHistory.Insert(0, new GuessRecord
+            {
+                Guess = playerGuess,
+                Hint = playerGuess < targetNumber ? "Too low!" : playerGuess > targetNumber ? "Too high!" : "Correct!",
+                Timestamp = DateTime.Now.ToString("HH:mm:ss")
+            });
+
+        if (playerGuess == targetNumber)
+        {
+            ShowMessage($"Congratulations! You got it in {attempts} attempts!", "alert-success");
+            gameStarted = false;
+            if (attempts < highScore || highScore == 0)
+            {
+                highScore = attempts;
+                await JS.InvokeVoidAsync("localStorage.setItem", "numberGameHighScore", JsonSerializer.Serialize(highScore));
+            }
+        }
+        else if (playerGuess < targetNumber)
+        {
+            ShowMessage("Too low! Try again.", "alert-warning");
+        }
+        else
+        {
+            ShowMessage("Too high! Try again.", "alert-warning");
+        }
+
+        playerGuess = 0;
+        StateHasChanged();
+    }
+
+    private void ShowMessage(string text, string cssClass)
+    {
+        message = text;
+        alertClass = cssClass;
+    }
+
+    private void ResetGame()
+    {
+        gameStarted = false;
+        message = "";
+        guessHistory.Clear();
+        StateHasChanged();
+    }
+
+    private class GuessRecord
+    {
+        public int Guess { get; set; }
+        public string Hint { get; set; } = "";
+        public string Timestamp { get; set; } = "";
+    }
+}

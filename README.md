@@ -21,6 +21,7 @@ Built with **Blazor WebAssembly, Tailwind CSS, and DaisyUI**, this project showc
 
 ## Demo
 Try it out live at: [https://myhome.adminsoftware.co.za/](https://myhome.adminsoftware.co.za/)
+![image](https://github.com/user-attachments/assets/e52cc835-d210-432c-abdb-5ae6ab24da72)
 
 ---
 

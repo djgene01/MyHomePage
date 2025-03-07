@@ -4,6 +4,27 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <!-- Standard SEO Meta Tags -->
+    <title>My Dashboard - Your Personal Productivity Hub</title>
+    <meta name="description" content="A customizable dashboard to manage your bookmarks, notes, and to-dos. All data stays in your browser for privacy and offline access." />
+    <meta name="keywords" content="dashboard, productivity, bookmarks, notes, todo, personal, offline" />
+    <meta name="robots" content="index, follow" />
+
+    <!-- Open Graph Meta Tags (for Facebook, LinkedIn, etc.) -->
+    <meta property="og:title" content="My Dashboard - Your Personal Productivity Hub" />
+    <meta property="og:description" content="Organize your life with this sleek, customizable dashboard. Store bookmarks, notes, and tasks—all locally in your browser." />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://myhome.adminsoftware.co.za/" />   
+    <meta property="og:site_name" content="My Dashboard" />
+
+    <!-- Twitter Card Meta Tags -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="My Dashboard - Your Personal Productivity Hub" />
+    <meta name="twitter:description" content="A private, offline-capable dashboard for managing bookmarks, notes, and tasks." />  
+    <!-- Optional: Add your Twitter handle -->
+    <!-- <meta name="twitter:creator" content="@YourTwitterHandle" /> -->
+
     <base href="/" />
     <link rel="stylesheet" href="@Assets["app.css"]" />
     <link rel="stylesheet" href="@Assets["MyHomePage.styles.css"]" />
@@ -17,6 +38,19 @@
 <body>
     <Routes @rendermode="InteractiveServer" />
     <script src="_framework/blazor.web.js"></script>
+    <script>
+        window.downloadFile = (filename, content) => {
+            const blob = new Blob([content], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        };
+    </script>
 </body>
 
 </html>

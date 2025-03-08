@@ -17,7 +17,9 @@
             @foreach (var task in Tasks)
             {
                 <div class="flex items-center gap-2">
-                    <input type="checkbox" class="checkbox checkbox-sm" @bind="task.IsCompleted" />
+                    <input type="checkbox" class="checkbox checkbox-sm"
+                           checked="@task.IsCompleted"
+                           @onchange="async (e) => await UpdateTaskCompletion(task, (bool)e.Value)" />
                     <span class="flex-1 @(task.IsCompleted ? "line-through text-gray-500" : "")">@task.Text</span>
                     <button class="btn btn-ghost btn-xs" @onclick="() => RemoveTask(task)">
                         <i class="fas fa-trash text-error"></i>
@@ -59,7 +61,7 @@
         if (!string.IsNullOrEmpty(newTask.Trim()))
         {
             Tasks.Add(new TodoItem { Text = newTask });
-            await JS.InvokeVoidAsync("localStorage.setItem", "todos", JsonSerializer.Serialize(Tasks));
+            await SaveTasks();
             newTask = "";
             StateHasChanged();
         }
@@ -68,8 +70,20 @@
     private async Task RemoveTask(TodoItem task)
     {
         Tasks.Remove(task);
-        await JS.InvokeVoidAsync("localStorage.setItem", "todos", JsonSerializer.Serialize(Tasks));
+        await SaveTasks();
         StateHasChanged();
+    }
+
+    private async Task UpdateTaskCompletion(TodoItem task, bool isCompleted)
+    {
+        task.IsCompleted = isCompleted;
+        await SaveTasks();
+        StateHasChanged();
+    }
+
+    private async Task SaveTasks()
+    {
+        await JS.InvokeVoidAsync("localStorage.setItem", "todos", JsonSerializer.Serialize(Tasks));
     }
 
     private class TodoItem

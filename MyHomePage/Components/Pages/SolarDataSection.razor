@@ -1,0 +1,273 @@
+﻿@inject IJSRuntime JS
+@implements IDisposable
+@using Microsoft.AspNetCore.SignalR.Client
+
+<div class="card bg-base-100 shadow-xl">
+    <div class="card-body">
+        <h2 class="card-title text-xl mb-4 flex justify-between items-center">
+            <span><i class="fas fa-solar-panel text-primary mr-2"></i>Solar Data</span>
+            <button class="btn btn-ghost btn-sm" title="Configure Connection" @onclick="ShowSettingsModal">
+                <i class="fas fa-cog"></i>
+            </button>
+        </h2>
+        <div class="divider"></div>
+        @if (isConnecting)
+        {
+            <div class="text-center">
+                <p class="text-gray-500">Connecting to data feed...</p>
+                <div class="loading loading-spinner loading-md"></div>
+            </div>
+        }
+        else if (isConnected)
+        {
+            <div class="space-y-4">
+                @if (filteredSolarData.Any())
+                {
+                    <table class="table w-full">
+                        <thead>
+                            <tr>
+                                <th>Parameter</th>
+                                <th>Value</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var data in filteredSolarData.OrderBy(d => d.Key))
+                            {
+                                <tr>
+                                    <td>@data.Key.Replace("solar_assistant/", "")</td>
+                                    <td>@data.Value</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+                else
+                {
+                    <p class="text-gray-500 text-center">No selected data available. Configure settings to display data.</p>
+                }
+            </div>
+        }
+        else
+        {
+            <div class="text-center space-y-2">
+                <p class="text-gray-500">Not connected to Solar Assistant data feed. Configure settings to connect.</p>
+                @if (!string.IsNullOrEmpty(ErrorMessage))
+                {
+                    <p class="text-red-500 text-sm">@ErrorMessage</p>
+                }
+            </div>
+        }
+    </div>
+</div>
+
+<!-- Settings Modal -->
+@if (showSettingsModal)
+{
+    <div class="modal modal-open">
+        <div class="modal-box">
+            <h3 class="font-bold text-lg">Configure Solar Assistant Data Feed</h3>
+            <div class="py-4 space-y-4">
+                <div class="form-control">
+                    <label class="label">
+                        <span class="label-text">Server URL (e.g., https://localhost:7159)</span>
+                    </label>
+                    <input type="text" class="input input-bordered" @bind="serverUrl" placeholder="https://localhost:7159" />
+                </div>
+                @if (isConnected)
+                {
+                    <div class="form-control">
+                        <label class="label">
+                            <span class="label-text">Select Data to Display</span>
+                        </label>
+                        <div class="space-y-2 max-h-60 overflow-y-auto">
+                            @foreach (var topic in solarData.Keys.OrderBy(k => k))
+                            {
+                                <label class="label cursor-pointer flex items-center gap-2">
+                                    <input type="checkbox"
+                                           class="checkbox checkbox-primary"
+                                           checked="@(selectedTopics.Contains(topic))"
+                                           @onchange="e => ToggleTopic(topic, (bool)e.Value)" />
+                                    <span class="label-text">@topic.Replace("solar_assistant/", "")</span>
+                                </label>
+                            }
+                        </div>
+                    </div>
+                }
+                <p class="text-sm text-gray-600">Note: This connects to the backend server hosting the SignalR hub.</p>
+                @if (!string.IsNullOrEmpty(ErrorMessage))
+                {
+                    <p class="text-sm text-red-500">@ErrorMessage</p>
+                }
+            </div>
+            <div class="modal-action">
+                <button class="btn btn-primary" @onclick="ConnectToServer" disabled="@(isConnecting || (isConnected && !string.IsNullOrEmpty(serverUrl)))">Connect</button>
+                <button class="btn" @onclick="HideSettingsModal">Close</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private Dictionary<string, string> solarData = new();
+    private HashSet<string> selectedTopics = new HashSet<string>();
+    private string serverUrl = "https://localhost:7159";
+    private bool isConnected = false;
+    private bool isConnecting = false;
+    private bool showSettingsModal = false;
+    private string ErrorMessage { get; set; } = "";
+    private HubConnection? hubConnection;
+
+    // Computed property to filter data based on selected topics
+    private Dictionary<string, string> filteredSolarData => solarData
+        .Where(kvp => selectedTopics.Count == 0 || selectedTopics.Contains(kvp.Key))
+        .ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Load selected topics from local storage
+        try
+        {
+            var savedTopics = await JS.InvokeAsync<string>("localStorage.getItem", "selectedSolarTopics");
+            if (!string.IsNullOrEmpty(savedTopics))
+            {
+                selectedTopics = new HashSet<string>(savedTopics.Split(',', StringSplitOptions.RemoveEmptyEntries));
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading topics from local storage: {ex.Message}");
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !isConnected && !string.IsNullOrEmpty(serverUrl))
+        {
+            await ConnectToServer();
+        }
+    }
+
+    private async Task ConnectToServer()
+    {
+        Console.WriteLine("ConnectToServer called.");
+        if (string.IsNullOrEmpty(serverUrl))
+        {
+            ErrorMessage = "Please provide a server URL.";
+            Console.WriteLine("Error: Server URL is empty.");
+            StateHasChanged();
+            return;
+        }
+
+        try
+        {
+            isConnecting = true;
+            ErrorMessage = "";
+            StateHasChanged();
+
+            if (hubConnection is not null)
+            {
+                await hubConnection.DisposeAsync();
+            }
+
+            Console.WriteLine($"Attempting to connect to {serverUrl}/mqtthub...");
+            hubConnection = new HubConnectionBuilder()
+                .WithUrl($"{serverUrl.TrimEnd('/')}/mqtthub")
+                .ConfigureLogging(logging =>
+                {
+                    logging.AddConsole();
+                    logging.SetMinimumLevel(LogLevel.Debug);
+                })
+                .Build();
+
+            hubConnection.On<string, string>("ReceiveMqttData", async (topic, payload) =>
+            {
+                Console.WriteLine($"Received data. Topic = {topic}, Payload = {payload}");
+                solarData[topic] = payload;
+                // Automatically add new topics to selectedTopics if none are selected yet
+                if (selectedTopics.Count == 0)
+                {
+                    selectedTopics.Add(topic);
+                    await SaveTopicsToLocalStorage();
+                }
+                await InvokeAsync(StateHasChanged);
+            });
+
+            hubConnection.Closed += async (error) =>
+            {
+                Console.WriteLine($"Hub connection closed: {error?.Message}");
+                isConnected = false;
+                isConnecting = false;
+                await InvokeAsync(StateHasChanged);
+            };
+
+            await hubConnection.StartAsync();
+            if (hubConnection.State == HubConnectionState.Connected)
+            {
+                Console.WriteLine("Connected to SignalR hub.");
+                isConnected = true;
+                isConnecting = false;
+            }
+            else
+            {
+                throw new Exception("Failed to establish connection to the hub.");
+            }
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"Connection failed: {ex.Message}";
+            Console.WriteLine($"Connection error: {ex.Message}");
+            isConnected = false;
+            isConnecting = false;
+            StateHasChanged();
+        }
+    }
+
+    private void ShowSettingsModal()
+    {
+        Console.WriteLine("ShowSettingsModal called.");
+        showSettingsModal = true;
+        StateHasChanged();
+    }
+
+    private void HideSettingsModal()
+    {
+        Console.WriteLine("HideSettingsModal called.");
+        showSettingsModal = false;
+        StateHasChanged();
+    }
+
+    private async Task ToggleTopic(string topic, bool isChecked)
+    {
+        if (isChecked)
+        {
+            selectedTopics.Add(topic);
+        }
+        else
+        {
+            selectedTopics.Remove(topic);
+        }
+        await SaveTopicsToLocalStorage();
+        StateHasChanged();
+    }
+
+    private async Task SaveTopicsToLocalStorage()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("localStorage.setItem", "selectedSolarTopics", string.Join(",", selectedTopics));
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error saving topics to local storage: {ex.Message}");
+        }
+    }
+
+    public void Dispose()
+    {
+        if (hubConnection is not null)
+        {
+            hubConnection.DisposeAsync().AsTask().Wait();
+        }
+    }
+}

@@ -5,8 +5,8 @@
 
 <PageTitle>My Dashboard</PageTitle>
 
-<div class="fixed inset-0 bg-cover bg-center" style="@($"background-image: url('{WallpaperUrl}');")">
-    <div class="container mx-auto relative z-10 min-h-screen p-4">
+<div class="bg-cover bg-center min-h-screen" style="@($"background-image: url('{WallpaperUrl}');")">
+    <div class="container mx-auto relative z-10 p-4">
         <!-- Header with improved visibility -->
         <header class="mb-6">
             <div class="flex justify-between items-center">
@@ -32,10 +32,10 @@
             <TodoSection />
             <MusicSection />
             <NumberGuessingGame />
-
-
-        </div>
+@*             <SolarDataSection />
+ *@        </div>
     </div>
+</div>
 
     <!-- First-Time User Popup -->
     @if (showIntroModal)
@@ -110,7 +110,6 @@
             </div>
         </div>
     }
-</div>
 
 @code {
     private string CurrentTime { get; set; } = "00:00:00";

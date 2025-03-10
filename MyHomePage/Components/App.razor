@@ -37,7 +37,12 @@
 
 <body>
     <Routes @rendermode="InteractiveServer" />
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/mqtt/4.3.7/mqtt.min.js"></script> <!-- MQTT library -->
+
+        <script src="interop.js"></script> <!-- Custom interop -->
+
     <script src="_framework/blazor.web.js"></script>
+
     <script>
         window.downloadFile = (filename, content) => {
             const blob = new Blob([content], { type: 'application/json' });

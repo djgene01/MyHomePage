@@ -1,4 +1,5 @@
 using MyHomePage.Components;
+using MyHomePage.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -7,6 +8,8 @@ builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 builder.Services.AddHostedService<MqttBackgroundService>();
 builder.Services.AddSignalR();
+builder.Services.AddSingleton<SolarDataService>();
+
 
 var app = builder.Build();
 

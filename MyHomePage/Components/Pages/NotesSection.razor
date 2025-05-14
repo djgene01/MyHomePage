@@ -12,63 +12,81 @@
         <div class="flex justify-between">
             <button class="btn btn-primary btn-sm" @onclick="SaveNotes">Save</button>
             <button class="btn btn-outline btn-sm" @onclick="ClearNotes">Clear</button>
-        </div>
-        <div class="mt-4">
-            <div class="collapse collapse-arrow bg-base-200">
-                <input type="checkbox" />
-                <div class="collapse-title font-medium">
-                    Saved Notes
-                </div>
-                <div class="collapse-content">
-                    @if (SavedNotes.Any())
-                    {
-                        @foreach (var note in SavedNotes)
-                        {
-                            <div class="mb-2 p-2 bg-base-100 rounded">
-                                @if (editingNoteId == note.Id)
-                                {
-                                    <textarea class="textarea textarea-bordered w-full mb-2" @bind="editingNoteContent"></textarea>
-                                    <div class="flex gap-2">
-                                        <button class="btn btn-success btn-xs" @onclick="() => SaveEditedNote(note)">
-                                            <i class="fas fa-save"></i> Save
-                                        </button>
-                                        <button class="btn btn-ghost btn-xs" @onclick="CancelEdit">
-                                            <i class="fas fa-times"></i> Cancel
-                                        </button>
-                                    </div>
-                                }
-                                else
-                                {
-                                    <div class="text-xs text-gray-500 mb-1">@note.Timestamp</div>
-                                    <p class="mb-2">@note.Content</p>
-                                    <div class="flex gap-2">
-                                        <button class="btn btn-ghost btn-xs" @onclick="() => StartEdit(note)">
-                                            <i class="fas fa-edit text-primary"></i>
-                                        </button>
-                                        <button class="btn btn-ghost btn-xs" @onclick="() => DeleteNote(note)">
-                                            <i class="fas fa-trash text-error"></i>
-                                        </button>
-                                    </div>
-                                }
-                            </div>
-                        }
-                    }
-                    else
-                    {
-                        <p class="text-sm italic">No saved notes yet.</p>
-                    }
-                </div>
-            </div>
+            <button class="btn btn-info btn-sm" @onclick="ShowModal">
+                <i class="fas fa-list mr-2"></i>View Notes
+            </button>
         </div>
     </div>
 </div>
 
+@if (showModal)
+{
+    <div class="fixed inset-0 flex items-center justify-center z-50 bg-black bg-opacity-40">
+        <div class="modal-box w-full max-w-2xl">
+            <h3 class="font-bold text-lg mb-4">Saved Notes</h3>
+            @if (SavedNotes.Any())
+            {
+                <div class="space-y-4 max-h-96 overflow-y-auto">
+                    @foreach (var note in SavedNotes)
+                    {
+                        <div class="p-3 bg-base-200 rounded shadow">
+                            @if (editingNoteId == note.Id)
+                            {
+                                <textarea class="textarea textarea-bordered w-full mb-2" @bind="editingNoteContent"></textarea>
+                                <div class="flex gap-2">
+                                    <button class="btn btn-success btn-xs" @onclick="() => SaveEditedNote(note)">
+                                        <i class="fas fa-save"></i> Save
+                                    </button>
+                                    <button class="btn btn-ghost btn-xs" @onclick="CancelEdit">
+                                        <i class="fas fa-times"></i> Cancel
+                                    </button>
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="flex justify-between items-center mb-1">
+                                    <span class="text-xs text-gray-500">@note.Timestamp</span>
+                                    <div class="flex gap-1">
+                                        <button class="btn btn-ghost btn-xs" title="Edit" @onclick="() => StartEdit(note)">
+                                            <i class="fas fa-edit text-primary"></i>
+                                        </button>
+                                        <button class="btn btn-ghost btn-xs" title="Delete" @onclick="() => DeleteNote(note)">
+                                            <i class="fas fa-trash text-error"></i>
+                                        </button>
+                                        <button class="btn btn-ghost btn-xs" title="Copy" @onclick="() => CopyToClipboard(note.Content)">
+                                            <i class="fas fa-copy text-info"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="whitespace-pre-line">@note.Content</div>
+                            }
+                        </div>
+                    }
+                </div>
+                <div class="mt-4 flex justify-end gap-2">
+                    <button class="btn btn-info btn-sm" @onclick="CopyAllNotes">
+                        <i class="fas fa-copy mr-2"></i>Copy All Notes
+                    </button>
+                    <button class="btn btn-outline btn-sm" @onclick="HideModal">Close</button>
+                </div>
+            }
+            else
+            {
+                <p class="text-sm italic">No saved notes yet.</p>
+                <div class="mt-4 flex justify-end">
+                    <button class="btn btn-outline btn-sm" @onclick="HideModal">Close</button>
+                </div>
+            }
+        </div>
+    </div>
+}
 @code {
     private string currentNote = "";
     private List<Note> SavedNotes { get; set; } = new();
     private bool isInitialized = false;
     private Guid? editingNoteId = null;
     private string editingNoteContent = "";
+    private bool showModal = false;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -89,11 +107,11 @@
         if (!string.IsNullOrEmpty(currentNote.Trim()))
         {
             SavedNotes.Insert(0, new Note
-                {
-                    Id = Guid.NewGuid(),
-                    Content = currentNote,
-                    Timestamp = DateTime.Now.ToString("G")
-                });
+            {
+                Id = Guid.NewGuid(),
+                Content = currentNote,
+                Timestamp = DateTime.Now.ToString("G")
+            });
             await JS.InvokeVoidAsync("localStorage.setItem", "notes", JsonSerializer.Serialize(SavedNotes));
             currentNote = "";
             StateHasChanged();
@@ -137,6 +155,27 @@
         StateHasChanged();
     }
 
+    private async Task CopyToClipboard(string text)
+    {
+        await JS.InvokeVoidAsync("clipboardCopy.copyText", text);
+    }
+
+    private async Task CopyAllNotes()
+    {
+        var allNotes = string.Join("\n\n", SavedNotes.Select(n => $"{n.Timestamp}\n{n.Content}"));
+        await JS.InvokeVoidAsync("clipboardCopy.copyText", allNotes);
+    }
+
+    private void ShowModal()
+    {
+        showModal = true;
+    }
+
+    private void HideModal()
+    {
+        showModal = false;
+    }
+
     private class Note
     {
         public Guid Id { get; set; }
@@ -144,3 +183,16 @@
         public string Timestamp { get; set; } = "";
     }
 }
+
+<script>
+    window.clipboardCopy = {
+        copyText: function(text) {
+            navigator.clipboard.writeText(text).then(function () {
+                console.log("Text copied");
+            })
+            .catch(function (error) {
+                console.error("Copy failed", error);
+            });
+        }
+    };
+</script>

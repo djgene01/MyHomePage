@@ -1,41 +1,97 @@
 ﻿@inject IJSRuntime JS
 
 <div class="card bg-base-100 shadow-xl">
-    <div class="card-body">
-        <h2 class="card-title text-xl mb-4 flex justify-between items-center">
-            <span><i class="fas fa-music text-primary mr-2"></i>Music</span>
-            <button class="btn btn-ghost btn-sm" title="Change Embed Code" @onclick="ShowSettingsModal">
-                <i class="fas fa-cog"></i>
-            </button>
-        </h2>
-        <div class="divider"></div>
-        @if (!string.IsNullOrEmpty(EmbedSrc))
-        {
-            <div class="w-full" style="height: 80px;">
-                @((MarkupString)ModifiedEmbedCode)
+    <div class="card-body p-3">
+        <h2 class="card-title text-lg mb-2 flex justify-between items-center">
+            <span class="flex items-center gap-2">
+                <i class="fas fa-music text-primary"></i> Music
+                @if (IsMinimized && !string.IsNullOrWhiteSpace(OriginalUrlForOpen))
+                {
+                    <span class="badge badge-ghost">Playing…</span>
+                }
+            </span>
+            <div class="flex items-center gap-1">
+                <button class="btn btn-ghost btn-xs" title="Settings" @onclick="ShowSettingsModal">
+                    <i class="fas fa-cog"></i>
+                </button>
+                <button class="btn btn-ghost btn-xs" title="Minimize / Restore" @onclick="ToggleMinimize">
+                    <i class="@(IsMinimized ? "fas fa-window-maximize" : "fas fa-window-minimize")"></i>
+                </button>
             </div>
+        </h2>
+
+        <div class="divider my-2"></div>
+
+        @if (!string.IsNullOrEmpty(BuiltIframeHtml))
+        {
+            <!-- Visible player host (resizable). When minimized, we hide this but keep a 1x1 hidden iframe mounted. -->
+            <div id="musicFrameHost"
+                 class="w-full rounded border border-base-300"
+                 style="height:@($"{EmbedHeight}px"); resize: vertical; overflow: hidden; min-height:100px;"
+                 @onmouseup="SaveEmbedHostHeight"
+                 @onmouseleave="SaveEmbedHostHeight"
+                 hidden="@IsMinimized">
+                @((MarkupString)BuiltIframeHtml)
+            </div>
+
+            <!-- Hidden tiny host so playback continues while minimized -->
+            @if (IsMinimized)
+            {
+                <div style="position:absolute; width:1px; height:1px; overflow:hidden; opacity:0; pointer-events:none;">
+                    @((MarkupString)BuiltIframeHtml)
+                </div>
+            }
+
+            @if (!string.IsNullOrWhiteSpace(OriginalUrlForOpen))
+            {
+                <div class="mt-2 text-right" hidden="@IsMinimized">
+                    <a class="link link-primary text-xs" href="@OriginalUrlForOpen" target="_blank" rel="noopener">Open in new tab</a>
+                </div>
+            }
         }
         else
         {
-            <p class="text-gray-500">No embed code saved. Click the gear icon to add one.</p>
+            <p class="text-gray-500">No playlist configured. Click the gear and paste a Spotify or YouTube/YouTube Music playlist.</p>
         }
     </div>
 </div>
 
-<!-- Settings Modal -->
 @if (showSettingsModal)
 {
     <div class="modal modal-open">
         <div class="modal-box">
-            <h3 class="font-bold text-lg">Change Music Embed Code</h3>
-            <div class="py-4">
-                <textarea class="textarea textarea-bordered w-full h-24" placeholder="Paste Spotify Embed Code"
-                          @bind="NewEmbedCode" @bind:event="oninput"></textarea>
-                <p class="text-sm text-gray-500 mt-1">Example: <iframe style=\"border-radius:12px\" src=\"https://open.spotify.com/embed/playlist/37i9dQZF1DXcBWIGoYBM5M\" width=\"100%\" height=\"352\" frameBorder=\"0\" allowfullscreen=\"\" allow=\"autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture\" loading=\"lazy\"></iframe></p>
-                <p class="text-sm text-red-500" id="errorMessage" style="display: @(!string.IsNullOrEmpty(ErrorMessage) ? "block" : "none")">@ErrorMessage</p>
+            <h3 class="font-bold text-lg">Set Music Playlist</h3>
+            <div class="py-4 space-y-4">
+                <textarea class="textarea textarea-bordered w-full h-24"
+                          placeholder="Paste Spotify embed/URL or YouTube/YouTube Music playlist URL/ID"
+                          @bind="NewInput" @bind:event="oninput"></textarea>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <label class="form-control">
+                        <span class="label-text">Default YouTube height (px)</span>
+                        <input type="number" class="input input-bordered"
+                               min="180" max="800" step="10"
+                               @bind="YouTubeHeightPx" />
+                    </label>
+                    <label class="form-control">
+                        <span class="label-text">Default Spotify height (px)</span>
+                        <input type="number" class="input input-bordered"
+                               min="80" max="300" step="10"
+                               @bind="SpotifyHeightPx" />
+                    </label>
+                </div>
+
+                <div class="text-sm text-gray-500">
+                    Tip: you can also drag the bottom edge of the player to resize any time.
+                </div>
+
+                @if (!string.IsNullOrEmpty(ErrorMessage))
+                {
+                    <p class="text-sm text-red-500">@ErrorMessage</p>
+                }
             </div>
             <div class="modal-action">
-                <button class="btn btn-primary" @onclick="SaveEmbedCode">Save</button>
+                <button class="btn btn-primary" @onclick="Save">Save</button>
                 <button class="btn" @onclick="HideSettingsModal">Cancel</button>
             </div>
         </div>
@@ -43,102 +99,210 @@
 }
 
 @code {
-    private string EmbedCode { get; set; } = "";
-    private string NewEmbedCode { get; set; } = "";
-    private string EmbedSrc { get; set; }
-    private string ModifiedEmbedCode { get; set; }
-    private string ErrorMessage { get; set; } = "";
-    private bool showSettingsModal = false;
+    private bool showSettingsModal;
+    private string NewInput = "";
+    private string StoredInput = "";
+    private string BuiltIframeHtml = "";
+    private string OriginalUrlForOpen = "";
+    private int EmbedHeight = 360; // current iframe height (resizable + persisted)
+    private string ErrorMessage = "";
+    private bool IsMinimized = false;
+
+    // Defaults for first-time load (used when building from input)
+    private int YouTubeHeightPx = 360;
+    private int SpotifyHeightPx = 120;
+
+    private enum Provider { Unknown, Spotify, YouTube }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender)
+        if (!firstRender) return;
+
+        // previous input
+        var saved = await JS.InvokeAsync<string>("localStorage.getItem", "musicEmbed");
+        if (!string.IsNullOrWhiteSpace(saved))
         {
-            var savedEmbed = await JS.InvokeAsync<string>("localStorage.getItem", "musicEmbed");
-            if (!string.IsNullOrEmpty(savedEmbed))
-            {
-                EmbedCode = savedEmbed;
-                NewEmbedCode = EmbedCode; // Sync for editing
-                await ParseEmbedCode();
-                UpdateModifiedEmbedCode(); // Apply autoplay and size
-            }
-            StateHasChanged();
+            StoredInput = saved;
+            NewInput = saved;
         }
+
+        // default heights
+        var ytH = await JS.InvokeAsync<string>("localStorage.getItem", "musicYouTubeH");
+        if (int.TryParse(ytH, out var yh) && yh >= 180 && yh <= 800) YouTubeHeightPx = yh;
+
+        var spH = await JS.InvokeAsync<string>("localStorage.getItem", "musicSpotifyH");
+        if (int.TryParse(spH, out var sh) && sh >= 80 && sh <= 300) SpotifyHeightPx = sh;
+
+        // current resizable height
+        var curH = await JS.InvokeAsync<string>("localStorage.getItem", "musicEmbedH");
+        if (int.TryParse(curH, out var eh) && eh >= 80 && eh <= 1200) EmbedHeight = eh;
+
+        // minimized state
+        IsMinimized = (await JS.InvokeAsync<string>("localStorage.getItem", "musicMin")) == "1";
+
+        if (!string.IsNullOrWhiteSpace(StoredInput))
+        {
+            BuildFromInput(StoredInput);
+        }
+
+        StateHasChanged();
     }
 
-    private async Task SaveEmbedCode()
-    {
-        if (!string.IsNullOrEmpty(NewEmbedCode))
-        {
-            EmbedCode = NewEmbedCode;
-            await JS.InvokeVoidAsync("localStorage.setItem", "musicEmbed", EmbedCode);
-            await JS.InvokeVoidAsync("console.log", $"Saved embed code: {EmbedCode}");
-            ErrorMessage = "";
-            await ParseEmbedCode();
-            UpdateModifiedEmbedCode(); // Apply autoplay and size
-            showSettingsModal = false;
-            StateHasChanged();
-        }
-        else
-        {
-            ErrorMessage = "Please enter a valid Spotify embed code.";
-            StateHasChanged();
-        }
-    }
-
-    private async Task ParseEmbedCode()
-    {
-        try
-        {
-            var srcMatch = System.Text.RegularExpressions.Regex.Match(EmbedCode, "src=\"([^\"]+)\"");
-            if (!srcMatch.Success)
-            {
-                ErrorMessage = "Invalid embed code. Could not find src attribute.";
-                EmbedSrc = null;
-                return;
-            }
-
-            EmbedSrc = srcMatch.Groups[1].Value;
-            if (!EmbedSrc.StartsWith("https://open.spotify.com/embed/"))
-            {
-                ErrorMessage = "Invalid Spotify embed URL.";
-                EmbedSrc = null;
-                return;
-            }
-
-            // Ensure autoplay is included
-            if (!EmbedSrc.Contains("autoplay=1"))
-            {
-                EmbedSrc += (EmbedSrc.Contains("?") ? "&" : "?") + "autoplay=1";
-            }
-
-            await JS.InvokeVoidAsync("console.log", $"Parsed embed src: {EmbedSrc}");
-            UpdateModifiedEmbedCode();
-        }
-        catch (Exception ex)
-        {
-            ErrorMessage = $"Error parsing embed code: {ex.Message}";
-            await JS.InvokeVoidAsync("console.error", ErrorMessage);
-            EmbedSrc = null;
-            StateHasChanged();
-        }
-    }
-
-    private void UpdateModifiedEmbedCode()
-    {
-        if (!string.IsNullOrEmpty(EmbedCode))
-        {
-            // Modify the embed code to adjust size
-            var modified = EmbedCode.Replace("height=\"352\"", "height=\"80\"")
-                                  .Replace("width=\"100%\"", "width=\"100%\"");
-            ModifiedEmbedCode = modified;
-        }
-        else
-        {
-            ModifiedEmbedCode = "";
-        }
-    }
+    public void OpenSettings() { ShowSettingsModal(); }
 
     private void ShowSettingsModal() => showSettingsModal = true;
     private void HideSettingsModal() => showSettingsModal = false;
+
+    private async Task Save()
+    {
+        ErrorMessage = "";
+        if (string.IsNullOrWhiteSpace(NewInput))
+        {
+            ErrorMessage = "Please paste a Spotify or YouTube playlist.";
+            return;
+        }
+
+        if (!BuildFromInput(NewInput))
+        {
+            StateHasChanged();
+            return;
+        }
+
+        StoredInput = NewInput;
+        await JS.InvokeVoidAsync("localStorage.setItem", "musicEmbed", StoredInput);
+        await JS.InvokeVoidAsync("localStorage.setItem", "musicYouTubeH", YouTubeHeightPx.ToString());
+        await JS.InvokeVoidAsync("localStorage.setItem", "musicSpotifyH", SpotifyHeightPx.ToString());
+        await JS.InvokeVoidAsync("localStorage.setItem", "musicEmbedH", EmbedHeight.ToString());
+
+        showSettingsModal = false;
+        StateHasChanged();
+    }
+
+    private void ToggleMinimize()
+    {
+        IsMinimized = !IsMinimized;
+        JS.InvokeVoidAsync("localStorage.setItem", "musicMin", IsMinimized ? "1" : "0");
+    }
+
+    private async Task SaveEmbedHostHeight()
+    {
+        try
+        {
+            // read actual height from DOM so resize:vertical is persisted
+            var h = await JS.InvokeAsync<int?>("getHeightById", "musicFrameHost");
+            if (h.HasValue && h.Value >= 80 && h.Value <= 1200)
+            {
+                EmbedHeight = h.Value;
+                await JS.InvokeVoidAsync("localStorage.setItem", "musicEmbedH", EmbedHeight.ToString());
+                StateHasChanged();
+            }
+        }
+        catch { /* ignore */ }
+    }
+
+    private bool BuildFromInput(string input)
+    {
+        try
+        {
+            ErrorMessage = "";
+            OriginalUrlForOpen = "";
+
+            var prov = DetectProvider(input, out var idOrUrl);
+            if (prov == Provider.Unknown)
+            {
+                ErrorMessage = "Unsupported input. Paste a Spotify playlist URL/embed or a YouTube/YouTube Music playlist URL/ID.";
+                BuiltIframeHtml = "";
+                return false;
+            }
+
+            if (prov == Provider.Spotify)
+            {
+                var playlistId = ExtractSpotifyPlaylistId(idOrUrl);
+                if (string.IsNullOrEmpty(playlistId))
+                {
+                    ErrorMessage = "Could not parse Spotify playlist ID.";
+                    BuiltIframeHtml = "";
+                    return false;
+                }
+
+                if (EmbedHeight < 80) EmbedHeight = SpotifyHeightPx;
+
+                var src = $"https://open.spotify.com/embed/playlist/{playlistId}?autoplay=1";
+                OriginalUrlForOpen = $"https://open.spotify.com/playlist/{playlistId}";
+                BuiltIframeHtml = BuildIframe(src, "autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture");
+                return true;
+            }
+            else // YouTube / YouTube Music
+            {
+                var listId = ExtractYouTubeListId(idOrUrl);
+                if (string.IsNullOrEmpty(listId))
+                {
+                    ErrorMessage = "Could not parse YouTube playlist ID.";
+                    BuiltIframeHtml = "";
+                    return false;
+                }
+
+                var upperList = listId.ToUpperInvariant();
+                if (upperList == "LM" || upperList == "LL")
+                {
+                    ErrorMessage = "This auto-playlist cannot be embedded (LM/LL). Make a regular playlist (public/unlisted) and use that URL.";
+                    BuiltIframeHtml = "";
+                    return false;
+                }
+
+                if (EmbedHeight < 100) EmbedHeight = YouTubeHeightPx;
+
+                // NOTE: no mute here (you asked to start unmuted).
+                var src = $"https://www.youtube.com/embed/videoseries?list={listId}&autoplay=1&rel=0&modestbranding=1";
+                OriginalUrlForOpen =
+                    idOrUrl.Contains("youtube.com", StringComparison.OrdinalIgnoreCase) ||
+                    idOrUrl.Contains("music.youtube.com", StringComparison.OrdinalIgnoreCase)
+                        ? idOrUrl
+                        : $"https://music.youtube.com/playlist?list={listId}";
+
+                BuiltIframeHtml = BuildIframe(src, "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share");
+                return true;
+            }
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"Error: {ex.Message}";
+            BuiltIframeHtml = "";
+            return false;
+        }
+    }
+
+    private static string BuildIframe(string src, string allow)
+        => $"""<iframe src="{src}" width="100%" height="100%" frameborder="0" allow="{allow}" allowfullscreen loading="lazy" referrerpolicy="strict-origin-when-cross-origin"></iframe>""";
+
+    private static Provider DetectProvider(string input, out string idOrUrl)
+    {
+        idOrUrl = input.Trim();
+
+        var mIframe = System.Text.RegularExpressions.Regex.Match(idOrUrl, "src\\s*=\\s*\"([^\"]+)\"", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        if (mIframe.Success) idOrUrl = mIframe.Groups[1].Value;
+
+        var lower = idOrUrl.ToLowerInvariant();
+        if (lower.Contains("open.spotify.com") || lower.Contains("spotify:playlist") || lower.Contains("spotify.com/embed/playlist")) return Provider.Spotify;
+        if (lower.Contains("youtube.com") || lower.Contains("youtu.be") || lower.Contains("music.youtube.com")) return Provider.YouTube;
+
+        if (System.Text.RegularExpressions.Regex.IsMatch(idOrUrl, "^[A-Za-z0-9_-]{10,}$")) return Provider.YouTube; // bare id guess
+        return Provider.Unknown;
+    }
+
+    private static string ExtractSpotifyPlaylistId(string urlOrEmbed)
+    {
+        var m1 = System.Text.RegularExpressions.Regex.Match(urlOrEmbed, @"open\.spotify\.com/(embed/)?playlist/([A-Za-z0-9]+)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        if (m1.Success) return m1.Groups[2].Value;
+        var m2 = System.Text.RegularExpressions.Regex.Match(urlOrEmbed, @"spotify:playlist:([A-Za-z0-9]+)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        if (m2.Success) return m2.Groups[1].Value;
+        return "";
+    }
+
+    private static string ExtractYouTubeListId(string urlOrId)
+    {
+        var m = System.Text.RegularExpressions.Regex.Match(urlOrId, @"[?&]list=([A-Za-z0-9_-]+)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        if (m.Success) return m.Groups[1].Value;
+        return urlOrId; // bare id fallback
+    }
 }

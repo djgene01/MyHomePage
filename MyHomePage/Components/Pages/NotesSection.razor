@@ -1,92 +1,261 @@
 ﻿@using System.Text.Json
 @inject IJSRuntime JS
 
-<div class="card bg-base-100 shadow-xl">
-    <div class="card-body">
-        <h2 class="card-title text-xl mb-4">
-            <i class="fas fa-sticky-note text-primary mr-2"></i>Notes
-        </h2>
-        <div class="mb-4">
-            <textarea class="textarea textarea-bordered w-full h-40" placeholder="Write your notes here..." @bind="currentNote"></textarea>
-        </div>
-        <div class="flex justify-between">
-            <button class="btn btn-primary btn-sm" @onclick="SaveNotes">Save</button>
-            <button class="btn btn-outline btn-sm" @onclick="ClearNotes">Clear</button>
-            <button class="btn btn-info btn-sm" @onclick="ShowModal">
-                <i class="fas fa-list mr-2"></i>View Notes
-            </button>
-        </div>
-    </div>
-</div>
+<div class="notes-container">
+    <!-- Main Notes Card -->
+    <div class="card bg-gradient-to-br from-base-100 to-base-200 shadow-2xl border border-base-300">
+        <div class="card-body p-6">
+            <!-- Header with improved styling -->
+            <div class="flex items-center justify-between mb-6">
+                <h2 class="card-title text-2xl font-bold text-primary flex items-center">
+                    <div class="bg-primary/10 p-2 rounded-lg mr-3">
+                        <i class="fas fa-sticky-note text-primary text-xl"></i>
+                    </div>
+                    Quick Notes
+                    <div class="badge badge-primary badge-sm ml-2">@SavedNotes.Count</div>
+                </h2>
+                <div class="flex gap-2">
+                    <button class="btn btn-ghost btn-sm" @onclick="ShowModal" title="View all notes">
+                        <i class="fas fa-list mr-1"></i>
+                        All Notes
+                    </button>
+                </div>
+            </div>
 
-@if (showModal)
-{
-    <div class="fixed inset-0 flex items-center justify-center z-50 bg-black bg-opacity-40">
-        <div class="modal-box w-full max-w-2xl">
-            <h3 class="font-bold text-lg mb-4">Saved Notes</h3>
-            @if (SavedNotes.Any())
-            {
-                <div class="space-y-4 max-h-96 overflow-y-auto">
-                    @foreach (var note in SavedNotes)
+            <!-- Note Input Area -->
+            <div class="space-y-4">
+                <div class="form-control">
+                    <label class="label">
+                        <span class="label-text font-medium">Write your note</span>
+                        <span class="label-text-alt">@currentNote.Length / 2000</span>
+                    </label>
+                    <textarea 
+                        class="textarea textarea-bordered h-32 resize-none focus:textarea-primary transition-all duration-200" 
+                        placeholder="Start typing your note here... Press Ctrl+Enter to save quickly!"
+                        @bind="currentNote"
+                        @onkeydown="HandleKeyDown"
+                        maxlength="2000"></textarea>
+                </div>
+
+                <!-- Action Buttons -->
+                <div class="flex flex-wrap gap-3 justify-between items-center">
+                    <div class="flex gap-2">
+                        <button class="btn btn-primary" 
+                                @onclick="SaveNotes" 
+                                disabled="@(string.IsNullOrWhiteSpace(currentNote))"
+                                title="Save note (Ctrl+Enter)">
+                            <i class="fas fa-save mr-2"></i>
+                            Save Note
+                        </button>
+                        <button class="btn btn-outline" 
+                                @onclick="ClearNotes" 
+                                disabled="@(string.IsNullOrWhiteSpace(currentNote))"
+                                title="Clear current note">
+                            <i class="fas fa-eraser mr-2"></i>
+                            Clear
+                        </button>
+                    </div>
+                    
+                    @if (SavedNotes.Any())
                     {
-                        <div class="p-3 bg-base-200 rounded shadow">
-                            @if (editingNoteId == note.Id)
-                            {
-                                <textarea class="textarea textarea-bordered w-full mb-2" @bind="editingNoteContent"></textarea>
-                                <div class="flex gap-2">
-                                    <button class="btn btn-success btn-xs" @onclick="() => SaveEditedNote(note)">
-                                        <i class="fas fa-save"></i> Save
-                                    </button>
-                                    <button class="btn btn-ghost btn-xs" @onclick="CancelEdit">
-                                        <i class="fas fa-times"></i> Cancel
-                                    </button>
-                                </div>
-                            }
-                            else
-                            {
-                                <div class="flex justify-between items-center mb-1">
-                                    <span class="text-xs text-gray-500">@note.Timestamp</span>
+                        <div class="flex gap-2">
+                            <button class="btn btn-info btn-sm" @onclick="ShowModal">
+                                <i class="fas fa-eye mr-1"></i>
+                                View (@SavedNotes.Count)
+                            </button>
+                        </div>
+                    }
+                </div>
+
+                <!-- Recent Notes Preview -->
+                @if (SavedNotes.Any())
+                {
+                    <div class="divider divider-start">
+                        <span class="text-sm text-base-content/60">Recent Notes</span>
+                    </div>
+                    <div class="space-y-2 max-h-40 overflow-y-auto">
+                        @foreach (var note in SavedNotes.Take(3))
+                        {
+                            <div class="bg-base-200/50 rounded-lg p-3 border border-base-300/50 hover:bg-base-200 transition-colors cursor-pointer"
+                                 @onclick="() => LoadNoteToEditor(note)">
+                                <div class="flex justify-between items-start mb-1">
+                                    <span class="text-xs text-base-content/60 font-medium">@note.Timestamp</span>
                                     <div class="flex gap-1">
-                                        <button class="btn btn-ghost btn-xs" title="Edit" @onclick="() => StartEdit(note)">
-                                            <i class="fas fa-edit text-primary"></i>
-                                        </button>
-                                        <button class="btn btn-ghost btn-xs" title="Delete" @onclick="() => DeleteNote(note)">
-                                            <i class="fas fa-trash text-error"></i>
-                                        </button>
-                                        <button class="btn btn-ghost btn-xs" title="Copy" @onclick="() => CopyToClipboard(note.Content)">
+                                        <button class="btn btn-ghost btn-xs" @onclick:stopPropagation="true" @onclick="() => QuickCopy(note.Content)" title="Quick copy">
                                             <i class="fas fa-copy text-info"></i>
                                         </button>
                                     </div>
                                 </div>
-                                <div class="whitespace-pre-line">@note.Content</div>
+                                <p class="text-sm line-clamp-2 text-base-content/80">@GetPreviewText(note.Content)</p>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Enhanced Modal -->
+@if (showModal)
+{
+    <div class="fixed inset-0 flex items-center justify-center z-50 bg-black/50 backdrop-blur-sm animate-fade-in">
+        <div class="modal-box w-full max-w-4xl max-h-[90vh] bg-base-100 shadow-2xl">
+            <!-- Modal Header -->
+            <div class="flex items-center justify-between mb-6 pb-4 border-b border-base-300">
+                <div>
+                    <h3 class="font-bold text-xl text-primary">All Saved Notes</h3>
+                    <p class="text-sm text-base-content/60 mt-1">@SavedNotes.Count note@(SavedNotes.Count != 1 ? "s" : "") saved</p>
+                </div>
+                <div class="flex gap-2">
+                    <button class="btn btn-info btn-sm" @onclick="CopyAllNotes" disabled="@(!SavedNotes.Any())">
+                        <i class="fas fa-copy mr-2"></i>Export All
+                    </button>
+                    <button class="btn btn-ghost btn-sm" @onclick="HideModal">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            </div>
+
+            @if (SavedNotes.Any())
+            {
+                <!-- Search/Filter -->
+                <div class="mb-4">
+                    <div class="form-control">
+                        <input type="text" 
+                               class="input input-bordered input-sm" 
+                               placeholder="Search notes..." 
+                               @bind="searchQuery"
+                               @oninput="FilterNotes" />
+                    </div>
+                </div>
+
+                <div class="space-y-3 max-h-96 overflow-y-auto pr-2">
+                    @foreach (var note in filteredNotes)
+                    {
+                        <div class="bg-base-200/30 rounded-xl p-4 border border-base-300/50 hover:shadow-md transition-all duration-200">
+                            @if (editingNoteId == note.Id)
+                            {
+                                <!-- Edit Mode -->
+                                <div class="space-y-3">
+                                    <textarea class="textarea textarea-bordered w-full h-32 resize-none" 
+                                              @bind="editingNoteContent"
+                                              placeholder="Edit your note..."></textarea>
+                                    <div class="flex gap-2 justify-end">
+                                        <button class="btn btn-success btn-sm" @onclick="() => SaveEditedNote(note)">
+                                            <i class="fas fa-save mr-1"></i> Save Changes
+                                        </button>
+                                        <button class="btn btn-ghost btn-sm" @onclick="CancelEdit">
+                                            <i class="fas fa-times mr-1"></i> Cancel
+                                        </button>
+                                    </div>
+                                </div>
+                            }
+                            else
+                            {
+                                <!-- Display Mode -->
+                                <div class="flex justify-between items-start mb-3">
+                                    <div class="flex items-center gap-2">
+                                        <span class="text-xs bg-primary/10 text-primary px-2 py-1 rounded-full font-medium">
+                                            @note.Timestamp
+                                        </span>
+                                        <span class="text-xs text-base-content/50">
+                                            @note.Content.Length characters
+                                        </span>
+                                    </div>
+                                    <div class="flex gap-1">
+                                        <button class="btn btn-ghost btn-xs hover:btn-primary" 
+                                                title="Edit note" 
+                                                @onclick="() => StartEdit(note)">
+                                            <i class="fas fa-edit"></i>
+                                        </button>
+                                        <button class="btn btn-ghost btn-xs hover:btn-info" 
+                                                title="Copy note" 
+                                                @onclick="() => CopyToClipboard(note.Content)">
+                                            <i class="fas fa-copy"></i>
+                                        </button>
+                                        <button class="btn btn-ghost btn-xs hover:btn-warning" 
+                                                title="Load to editor" 
+                                                @onclick="() => LoadNoteToEditor(note)">
+                                            <i class="fas fa-edit"></i>
+                                        </button>
+                                        <button class="btn btn-ghost btn-xs hover:btn-error" 
+                                                title="Delete note" 
+                                                @onclick="() => ShowDeleteConfirmation(note)">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="whitespace-pre-line text-sm leading-relaxed text-base-content/90 bg-base-100/50 p-3 rounded-lg">
+                                    @note.Content
+                                </div>
                             }
                         </div>
                     }
                 </div>
-                <div class="mt-4 flex justify-end gap-2">
-                    <button class="btn btn-info btn-sm" @onclick="CopyAllNotes">
-                        <i class="fas fa-copy mr-2"></i>Copy All Notes
-                    </button>
-                    <button class="btn btn-outline btn-sm" @onclick="HideModal">Close</button>
-                </div>
             }
             else
             {
-                <p class="text-sm italic">No saved notes yet.</p>
-                <div class="mt-4 flex justify-end">
-                    <button class="btn btn-outline btn-sm" @onclick="HideModal">Close</button>
+                <div class="text-center py-12">
+                    <div class="text-6xl text-base-content/20 mb-4">
+                        <i class="fas fa-sticky-note"></i>
+                    </div>
+                    <p class="text-lg font-medium text-base-content/60 mb-2">No notes yet</p>
+                    <p class="text-sm text-base-content/40">Start by writing your first note above!</p>
                 </div>
             }
         </div>
     </div>
 }
+
+<!-- Delete Confirmation Modal -->
+@if (showDeleteConfirmation && noteToDelete != null)
+{
+    <div class="fixed inset-0 flex items-center justify-center z-60 bg-black/60 backdrop-blur-sm">
+        <div class="modal-box w-full max-w-md">
+            <h3 class="font-bold text-lg text-error mb-4">Confirm Delete</h3>
+            <p class="text-sm text-base-content/80 mb-4">
+                Are you sure you want to delete this note? This action cannot be undone.
+            </p>
+            <div class="bg-base-200 p-3 rounded-lg mb-4 max-h-32 overflow-y-auto">
+                <p class="text-xs text-base-content/60 line-clamp-4">@noteToDelete.Content</p>
+            </div>
+            <div class="flex gap-2 justify-end">
+                <button class="btn btn-ghost btn-sm" @onclick="HideDeleteConfirmation">Cancel</button>
+                <button class="btn btn-error btn-sm" @onclick="ConfirmDelete">
+                    <i class="fas fa-trash mr-1"></i>Delete
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Toast Notifications -->
+@if (showToast)
+{
+    <div class="toast toast-top toast-end z-50">
+        <div class="alert alert-success shadow-lg">
+            <div>
+                <i class="fas fa-check-circle"></i>
+                <span>@toastMessage</span>
+            </div>
+        </div>
+    </div>
+}
+
 @code {
     private string currentNote = "";
     private List<Note> SavedNotes { get; set; } = new();
+    private List<Note> filteredNotes = new();
+    private string searchQuery = "";
     private bool isInitialized = false;
     private Guid? editingNoteId = null;
     private string editingNoteContent = "";
     private bool showModal = false;
+    private bool showDeleteConfirmation = false;
+    private Note? noteToDelete = null;
+    private bool showToast = false;
+    private string toastMessage = "";
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -96,24 +265,37 @@
             if (!string.IsNullOrEmpty(savedNotes))
             {
                 SavedNotes = JsonSerializer.Deserialize<List<Note>>(savedNotes) ?? new();
+                filteredNotes = SavedNotes.ToList();
             }
             isInitialized = true;
             StateHasChanged();
         }
     }
 
+    private async Task HandleKeyDown(KeyboardEventArgs e)
+    {
+        if (e.CtrlKey && e.Key == "Enter")
+        {
+            await SaveNotes();
+        }
+    }
+
     private async Task SaveNotes()
     {
-        if (!string.IsNullOrEmpty(currentNote.Trim()))
+        if (!string.IsNullOrWhiteSpace(currentNote))
         {
-            SavedNotes.Insert(0, new Note
+            var newNote = new Note
             {
                 Id = Guid.NewGuid(),
-                Content = currentNote,
-                Timestamp = DateTime.Now.ToString("G")
-            });
+                Content = currentNote.Trim(),
+                Timestamp = DateTime.Now.ToString("MMM dd, yyyy - HH:mm")
+            };
+            
+            SavedNotes.Insert(0, newNote);
             await JS.InvokeVoidAsync("localStorage.setItem", "notes", JsonSerializer.Serialize(SavedNotes));
             currentNote = "";
+            filteredNotes = SavedNotes.ToList();
+            await ShowToast("Note saved successfully!");
             StateHasChanged();
         }
     }
@@ -121,6 +303,33 @@
     private void ClearNotes()
     {
         currentNote = "";
+    }
+
+    private void LoadNoteToEditor(Note note)
+    {
+        currentNote = note.Content;
+        HideModal();
+    }
+
+    private string GetPreviewText(string content)
+    {
+        return content.Length > 100 ? content.Substring(0, 100) + "..." : content;
+    }
+
+    private void FilterNotes()
+    {
+        if (string.IsNullOrWhiteSpace(searchQuery))
+        {
+            filteredNotes = SavedNotes.ToList();
+        }
+        else
+        {
+            filteredNotes = SavedNotes.Where(n => 
+                n.Content.Contains(searchQuery, StringComparison.OrdinalIgnoreCase) ||
+                n.Timestamp.Contains(searchQuery, StringComparison.OrdinalIgnoreCase)
+            ).ToList();
+        }
+        StateHasChanged();
     }
 
     private void StartEdit(Note note)
@@ -131,11 +340,12 @@
 
     private async Task SaveEditedNote(Note note)
     {
-        if (!string.IsNullOrEmpty(editingNoteContent.Trim()))
+        if (!string.IsNullOrWhiteSpace(editingNoteContent))
         {
-            note.Content = editingNoteContent;
-            note.Timestamp = DateTime.Now.ToString("G");
+            note.Content = editingNoteContent.Trim();
+            note.Timestamp = DateTime.Now.ToString("MMM dd, yyyy - HH:mm") + " (edited)";
             await JS.InvokeVoidAsync("localStorage.setItem", "notes", JsonSerializer.Serialize(SavedNotes));
+            await ShowToast("Note updated successfully!");
         }
         editingNoteId = null;
         editingNoteContent = "";
@@ -148,32 +358,73 @@
         editingNoteContent = "";
     }
 
-    private async Task DeleteNote(Note note)
+    private void ShowDeleteConfirmation(Note note)
     {
-        SavedNotes.Remove(note);
-        await JS.InvokeVoidAsync("localStorage.setItem", "notes", JsonSerializer.Serialize(SavedNotes));
-        StateHasChanged();
+        noteToDelete = note;
+        showDeleteConfirmation = true;
+    }
+
+    private void HideDeleteConfirmation()
+    {
+        showDeleteConfirmation = false;
+        noteToDelete = null;
+    }
+
+    private async Task ConfirmDelete()
+    {
+        if (noteToDelete != null)
+        {
+            SavedNotes.Remove(noteToDelete);
+            await JS.InvokeVoidAsync("localStorage.setItem", "notes", JsonSerializer.Serialize(SavedNotes));
+            filteredNotes = SavedNotes.ToList();
+            await ShowToast("Note deleted successfully!");
+            StateHasChanged();
+        }
+        HideDeleteConfirmation();
     }
 
     private async Task CopyToClipboard(string text)
     {
         await JS.InvokeVoidAsync("clipboardCopy.copyText", text);
+        await ShowToast("Note copied to clipboard!");
+    }
+
+    private async Task QuickCopy(string text)
+    {
+        await JS.InvokeVoidAsync("clipboardCopy.copyText", text);
+        await ShowToast("Copied!");
     }
 
     private async Task CopyAllNotes()
     {
-        var allNotes = string.Join("\n\n", SavedNotes.Select(n => $"{n.Timestamp}\n{n.Content}"));
+        var allNotes = string.Join("\n" + new string('=', 50) + "\n", 
+            SavedNotes.Select(n => $"{n.Timestamp}\n\n{n.Content}"));
         await JS.InvokeVoidAsync("clipboardCopy.copyText", allNotes);
+        await ShowToast("All notes exported to clipboard!");
     }
 
     private void ShowModal()
     {
         showModal = true;
+        filteredNotes = SavedNotes.ToList();
+        searchQuery = "";
     }
 
     private void HideModal()
     {
         showModal = false;
+        editingNoteId = null;
+        editingNoteContent = "";
+    }
+
+    private async Task ShowToast(string message)
+    {
+        toastMessage = message;
+        showToast = true;
+        StateHasChanged();
+        await Task.Delay(3000);
+        showToast = false;
+        StateHasChanged();
     }
 
     private class Note
@@ -184,14 +435,72 @@
     }
 }
 
+<style>
+    .notes-container {
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 1rem;
+    }
+
+    .line-clamp-2 {
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
+
+    .line-clamp-4 {
+        display: -webkit-box;
+        -webkit-line-clamp: 4;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
+
+    .animate-fade-in {
+        animation: fadeIn 0.2s ease-in-out;
+    }
+
+    @@keyframes fadeIn {
+        from { opacity: 0; transform: scale(0.95); }
+        to { opacity: 1; transform: scale(1); }
+    }
+
+    .toast {
+        position: fixed;
+        top: 1rem;
+        right: 1rem;
+        z-index: 1000;
+    }
+
+    /* Custom scrollbar */
+    .overflow-y-auto::-webkit-scrollbar {
+        width: 6px;
+    }
+
+    .overflow-y-auto::-webkit-scrollbar-track {
+        background: transparent;
+    }
+
+    .overflow-y-auto::-webkit-scrollbar-thumb {
+        background: hsl(var(--bc) / 0.2);
+        border-radius: 3px;
+    }
+
+    .overflow-y-auto::-webkit-scrollbar-thumb:hover {
+        background: hsl(var(--bc) / 0.3);
+    }
+</style>
+
 <script>
     window.clipboardCopy = {
         copyText: function(text) {
-            navigator.clipboard.writeText(text).then(function () {
-                console.log("Text copied");
+            return navigator.clipboard.writeText(text).then(function () {
+                console.log("Text copied successfully");
+                return true;
             })
             .catch(function (error) {
                 console.error("Copy failed", error);
+                return false;
             });
         }
     };

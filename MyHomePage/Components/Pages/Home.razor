@@ -7,7 +7,7 @@
 
 <div class="bg-cover bg-center min-h-screen" style="@($"background-image: url('{WallpaperUrl}');")">
     <div class="container mx-auto relative z-10 p-4">
-        <!-- Header with improved visibility -->
+        <!-- Header -->
         <header class="mb-6">
             <div class="flex justify-between items-center">
                 <div class="flex items-center gap-4 bg-black/30 backdrop-blur-sm p-3 rounded-lg shadow-lg">
@@ -18,7 +18,6 @@
                     </button>
                 </div>
                 <div class="flex items-center gap-2 bg-black/30 backdrop-blur-sm p-2 rounded-lg shadow-lg">
-                    <!-- Solar Dashboard Icon -->
                     <a href="/solardashboard" class="btn btn-ghost btn-sm text-white hover:bg-white/20" title="Solar Dashboard">
                         <i class="fas fa-solar-panel text-xl"></i>
                     </a>
@@ -29,91 +28,141 @@
             </div>
         </header>
 
-        <!-- Main Content -->
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <BookmarksSection />
-            <NotesSection />
-            <TodoSection />
-            <MusicSection />
-            <NumberGuessingGame />
-@*             <SolarDataSection />
- *@        </div>
+        <!-- Tabs -->
+        <div class="bg-black/30 backdrop-blur-sm rounded-xl shadow-lg p-2">
+            <div role="tablist" class="tabs tabs-boxed w-full">
+                <button role="tab" class="tab grow @TabClass(TabId.Bookmarks)" @onclick="() => SetTab(TabId.Bookmarks)">
+                    <i class="fas fa-bookmark mr-2"></i>Bookmarks
+                </button>
+                <button role="tab" class="tab grow @TabClass(TabId.Notes)" @onclick="() => SetTab(TabId.Notes)">
+                    <i class="fas fa-sticky-note mr-2"></i>Notes
+                </button>
+                <button role="tab" class="tab grow @TabClass(TabId.Todos)" @onclick="() => SetTab(TabId.Todos)">
+                    <i class="fas fa-list-check mr-2"></i>To-Do
+                </button>
+                <button role="tab" class="tab grow @TabClass(TabId.Music)" @onclick="() => SetTab(TabId.Music)">
+                    <i class="fas fa-music mr-2"></i>Music
+                </button>
+            </div>
+
+            <!-- Tab Content (Music stays mounted elsewhere to keep playback alive) -->
+            <div class="p-3">
+                @switch (ActiveTab)
+                {
+                    case TabId.Bookmarks:
+                        <BookmarksSection />
+                        break;
+                    case TabId.Notes:
+                        <NotesSection />
+                        break;
+                    case TabId.Todos:
+                        <TodoSection />
+                        break;
+                    case TabId.Music:
+                        <div class="card bg-base-100 shadow-xl">
+                            <div class="card-body">
+                                <h2 class="card-title text-xl mb-4">
+                                    <i class="fas fa-music text-primary mr-2"></i>Music Controls
+                                </h2>
+                                <p class="text-sm opacity-80 mb-3">
+                                    The player keeps running in the sticky mini-player at the bottom. Use this panel to open settings.
+                                </p>
+                                <div class="flex gap-2">
+                                    <button class="btn btn-primary" @onclick="() => musicRef?.OpenSettings()">
+                                        <i class="fas fa-cog mr-2"></i>Open Music Settings
+                                    </button>
+                                    <button class="btn" @onclick="() => SetTab(TabId.Bookmarks)">
+                                        <i class="fas fa-arrow-left mr-2"></i>Back to Bookmarks
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        break;
+                }
+            </div>
+        </div>
     </div>
 </div>
 
-    <!-- First-Time User Popup -->
-    @if (showIntroModal)
-    {
-        <div class="modal modal-open">
-            <div class="modal-box">
-                <h3 class="font-bold text-lg">Welcome to Your Dashboard!</h3>
-                <p class="py-4">
-                    Here you can manage your bookmarks, notes, and to-do lists.
-                    All your data is stored locally in your browser's storage, so it’s private and available offline.
-                    Customize your wallpaper by clicking the image icon in the header.
-                    Use the settings (gear icon) to export or import your data.
-                    Enjoy your dashboard!
-                </p>
-                <div class="modal-action">
-                    <button class="btn" @onclick="CloseIntroModal">Got it!</button>
-                </div>
+<!-- Sticky persistent player: always mounted -->
+<div class="fixed bottom-4 right-4 max-w-md w-[360px] z-50">
+    <MusicSection @ref="musicRef" />
+</div>
+
+
+<!-- First-Time User Popup -->
+@if (showIntroModal)
+{
+    <div class="modal modal-open">
+        <div class="modal-box">
+            <h3 class="font-bold text-lg">Welcome to Your Dashboard!</h3>
+            <p class="py-4">
+                Here you can manage your bookmarks, notes, and to-do lists.
+                All your data is stored locally in your browser's storage, so it’s private and available offline.
+                Customize your wallpaper by clicking the image icon in the header.
+                Use the settings (gear icon) to export or import your data.
+                Enjoy your dashboard!
+            </p>
+            <div class="modal-action">
+                <button class="btn" @onclick="CloseIntroModal">Got it!</button>
             </div>
         </div>
-    }
+    </div>
+}
 
-    <!-- Settings Modal -->
-    @if (showSettingsModal)
-    {
-        <div class="modal modal-open">
-            <div class="modal-box">
-                <h3 class="font-bold text-lg">Settings</h3>
-                <div class="py-4">
-                    <button class="btn btn-primary mb-4 w-full" @onclick="ExportData">Export Data</button>
-                    <div class="form-control">
-                        <label class="label">
-                            <span class="label-text">Import Data</span>
-                        </label>
-                        <InputFile OnChange="ImportData" class="file-input file-input-bordered w-full" />
+<!-- Settings Modal -->
+@if (showSettingsModal)
+{
+    <div class="modal modal-open">
+        <div class="modal-box">
+            <h3 class="font-bold text-lg">Settings</h3>
+            <div class="py-4">
+                <button class="btn btn-primary mb-4 w-full" @onclick="ExportData">Export Data</button>
+                <div class="form-control">
+                    <label class="label">
+                        <span class="label-text">Import Data</span>
+                    </label>
+                    <InputFile OnChange="ImportData" class="file-input file-input-bordered w-full" />
+                </div>
+            </div>
+            <div class="modal-action">
+                <button class="btn" @onclick="HideSettingsModal">Close</button>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Wallpaper Modal -->
+@if (showWallpaperModal)
+{
+    <div class="modal modal-open">
+        <div class="modal-box w-11/12 max-w-6xl">
+            <h3 class="font-bold text-2xl mb-6">Select Wallpaper</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 p-4 max-h-[70vh] overflow-y-auto">
+                @foreach (var preset in PresetWallpapers)
+                {
+                    <div class="relative group">
+                        <button class="w-full" @onclick="() => SetWallpaper(preset)">
+                            <img src="@preset" class="w-full h-48 object-cover rounded-lg shadow-md transition-transform group-hover:scale-105" alt="Wallpaper preview" />
+                            <div class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/20 rounded-lg">
+                                <span class="text-white font-medium">Select</span>
+                            </div>
+                        </button>
+                        @if (preset == WallpaperUrl)
+                        {
+                            <div class="absolute top-2 right-2 bg-primary text-white p-1 rounded-full">
+                                <i class="fas fa-check text-xs"></i>
+                            </div>
+                        }
                     </div>
-                </div>
-                <div class="modal-action">
-                    <button class="btn" @onclick="HideSettingsModal">Close</button>
-                </div>
+                }
+            </div>
+            <div class="modal-action">
+                <button class="btn" @onclick="HideWallpaperModal">Close</button>
             </div>
         </div>
-    }
-
-    <!-- Wallpaper Modal -->
-    @if (showWallpaperModal)
-    {
-        <div class="modal modal-open">
-            <div class="modal-box w-11/12 max-w-6xl">
-                <h3 class="font-bold text-2xl mb-6">Select Wallpaper</h3>
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 p-4 max-h-[70vh] overflow-y-auto">
-                    @foreach (var preset in PresetWallpapers)
-                    {
-                        <div class="relative group">
-                            <button class="w-full" @onclick="() => SetWallpaper(preset)">
-                                <img src="@preset" class="w-full h-48 object-cover rounded-lg shadow-md transition-transform group-hover:scale-105" alt="Wallpaper preview" />
-                                <div class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/20 rounded-lg">
-                                    <span class="text-white font-medium">Select</span>
-                                </div>
-                            </button>
-                            @if (preset == WallpaperUrl)
-                            {
-                                <div class="absolute top-2 right-2 bg-primary text-white p-1 rounded-full">
-                                    <i class="fas fa-check text-xs"></i>
-                                </div>
-                            }
-                        </div>
-                    }
-                </div>
-                <div class="modal-action">
-                    <button class="btn" @onclick="HideWallpaperModal">Close</button>
-                </div>
-            </div>
-        </div>
-    }
+    </div>
+}
 
 @code {
     private string CurrentTime { get; set; } = "00:00:00";
@@ -124,15 +173,31 @@
     private bool showSettingsModal = false;
     private string[] dataKeys = new[] { "wallpaper", "bookmarks", "notes", "todos" };
 
+    // Hold a reference to the persistent music component
+    private MusicSection? musicRef;
+
+    private enum TabId { Bookmarks, Notes, Todos, Music /*, Solar*/ }
+    private TabId ActiveTab = TabId.Bookmarks;
+
+    private string TabClass(TabId id) => ActiveTab == id ? "tab-active" : "";
+
+    private async Task SetTab(TabId id)
+    {
+        if (ActiveTab == id) return;
+        ActiveTab = id;
+        await JS.InvokeVoidAsync("localStorage.setItem", "dashboardTab", ((int)ActiveTab).ToString());
+        StateHasChanged();
+    }
+
     private List<string> PresetWallpapers { get; set; } = new()
     {
-        "https://images.unsplash.com/photo-1506748686214-e9df14d4d9d0", // Abstract
-        "https://images.unsplash.com/photo-1441974231531-c6227db76b6e", // Forest
-        "https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05", // Mountains
-        "https://images.unsplash.com/photo-1507525428034-b723cf961d3e", // Beach
-        "https://images.unsplash.com/photo-1519681393784-d120267933ba", // Snowy mountains
-        "https://images.unsplash.com/photo-1482192505345-5655af888cc4", // Night sky
-        "https://images.unsplash.com/photo-1493246507139-91e8fad9978e"  // Desert
+        "https://images.unsplash.com/photo-1506748686214-e9df14d4d9d0",
+        "https://images.unsplash.com/photo-1441974231531-c6227db76b6e",
+        "https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05",
+        "https://images.unsplash.com/photo-1507525428034-b723cf961d3e",
+        "https://images.unsplash.com/photo-1519681393784-d120267933ba",
+        "https://images.unsplash.com/photo-1482192505345-5655af888cc4",
+        "https://images.unsplash.com/photo-1493246507139-91e8fad9978e"
     };
 
     protected override async Task OnInitializedAsync()
@@ -147,33 +212,27 @@
         if (firstRender)
         {
             var savedWallpaper = await JS.InvokeAsync<string>("localStorage.getItem", "wallpaper");
-            if (!string.IsNullOrEmpty(savedWallpaper) && PresetWallpapers.Contains(savedWallpaper))
-            {
-                WallpaperUrl = savedWallpaper;
-            }
-            else
-            {
-                WallpaperUrl = PresetWallpapers[0];
-            }
+            WallpaperUrl = (!string.IsNullOrEmpty(savedWallpaper) && PresetWallpapers.Contains(savedWallpaper))
+                ? savedWallpaper
+                : PresetWallpapers[0];
 
-            // Check if the user has seen the intro popup
             var hasSeenIntro = await JS.InvokeAsync<string>("localStorage.getItem", "hasSeenIntro");
             if (hasSeenIntro != "true")
-            {
                 showIntroModal = true;
-            }
+
+            var savedTab = await JS.InvokeAsync<string>("localStorage.getItem", "dashboardTab");
+            if (int.TryParse(savedTab, out var tabIdx) && Enum.IsDefined(typeof(TabId), tabIdx))
+                ActiveTab = (TabId)tabIdx;
 
             var timer = new System.Threading.Timer(
-                async (_) =>
+                async _ =>
                 {
                     var now = DateTime.Now;
                     CurrentTime = now.ToString("HH:mm:ss");
                     CurrentDate = now.ToString("dddd, MMMM d");
                     await InvokeAsync(StateHasChanged);
                 },
-                null,
-                0,
-                1000);
+                null, 0, 1000);
 
             StateHasChanged();
         }
@@ -206,9 +265,7 @@
         {
             var value = await JS.InvokeAsync<string>("localStorage.getItem", key);
             if (value != null)
-            {
                 data[key] = value;
-            }
         }
         var json = JsonSerializer.Serialize(data);
         await JS.InvokeVoidAsync("downloadFile", "dashboard-data.json", json);
@@ -221,16 +278,15 @@
 
         try
         {
-            var stream = e.File.OpenReadStream();
+            using var stream = e.File.OpenReadStream();
             using var reader = new StreamReader(stream);
             var json = await reader.ReadToEndAsync();
             var data = JsonSerializer.Deserialize<Dictionary<string, string>>(json);
             if (data != null)
             {
                 foreach (var kvp in data)
-                {
                     await JS.InvokeVoidAsync("localStorage.setItem", kvp.Key, kvp.Value);
-                }
+
                 await JS.InvokeVoidAsync("alert", "Data imported successfully. The page will reload.");
                 await JS.InvokeVoidAsync("location.reload");
             }
